@@ -1,4 +1,5 @@
 const std = @import("std");
+const File = std.fs.File;
 
 pub const ReturnCodes = enum{
     Success,
@@ -18,7 +19,7 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
 
         pub const Config = struct {
             callback: ?*const CallbackFn = null,
-            max_iters: u32 = 1000,
+            max_iters: usize = 1000,
             dt: T = @as(T, 0.1),
             save: bool = false,
             adaptive: bool = false
@@ -27,10 +28,11 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
         pub const Solution = struct {
             t: []T,
             u: []U,
-            retcode: ?ReturnCodes,
+            retcode: ?ReturnCodes = null,
             allocator: std.mem.Allocator,
+            index: usize = 0,
 
-            pub fn init(allocator: std.mem.Allocator, max_size: u32) !@This() {
+            pub fn init(allocator: std.mem.Allocator, max_size: usize) !@This() {
                 var t = try allocator.alloc(T, max_size);
                 errdefer allocator.free(t);
 
@@ -40,9 +42,29 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
                 return .{
                     .t = t,
                     .u = u,
-                    .retcode = null,
                     .allocator = allocator,
                 };
+            }
+
+            pub fn printInfo(self: *const @This(), f: File) !void {
+                try f.writer().print(
+                    \\ ZigODE Solution:
+                    \\ ~~~~~~~~~~~~~~~~
+                    \\ retcode : {?}
+                    \\ last t  : {e}
+                    \\ last u  : {e}
+                    \\
+                    , .{self.retcode, self.t[self.t.len-1], self.u[self.u.len-1]}
+                );
+            }
+
+            pub fn saveStep(self: *@This(), t: T, u:*const U) void {
+                std.debug.assert(self.index < self.t.len);
+                self.t[self.index] = t;
+                for (self.u[self.index]) |*v,i| {
+                    v.* = u[i];
+                }
+                self.index += 1;
             }
 
             pub fn deinit(self: * @This()) void {
@@ -102,7 +124,7 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
             var du: U = .{@as(T, 0.0)} ** N;
             var t: T = min_time;
             
-            var solution: Solution = try Solution.init(self.allocator, config.max_iters);
+            var solution: Solution = try Solution.init(self.allocator, if (config.save) config.max_iters else 1);
 
             // as of *this* very moment, we're integrating
             self.is_integrating = true;
@@ -110,15 +132,20 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
             errdefer self.is_integrating = false;
 
             var dt: T = config.dt;
-            var step_counter: u32 = 0;
+            var step_counter: usize = 0;
             while (step_counter < config.max_iters) : (step_counter += 1) {
                 // calculate next time step
                 dt = self.calcTimeStep(config.adaptive, dt);
                 // do the integration step
                 try self.performStep(self.ptr, &du, &self.uprev, t, config.dt);
-                // update u
+                // update u and t
+                t = t + dt;
                 for (self.uprev) |*uprev, i| {
-                    uprev.* = uprev.* + config.dt * du[i];
+                    uprev.* = uprev.* + dt * du[i];
+                }
+                // maybe save
+                if (config.save) {
+                    solution.saveStep(t, &self.uprev);
                 }
 
                 if (t >= max_time) {
@@ -128,7 +155,7 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
 
                 // call the callback function
                 if (config.callback) |cb| {
-                    cb(self, self.uprev, t);
+                    cb(self, &self.uprev, t);
                 }
 
                 if (!self.is_integrating) {
@@ -137,6 +164,9 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
             } else self.retcode = ReturnCodes.MaxIterReached;
             // and now we have stopped
             self.is_integrating = false;
+
+            // just save the last value
+            solution.saveStep(t, &self.uprev);
 
             solution.retcode = self.retcode;
             return solution;
