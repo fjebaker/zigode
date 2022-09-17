@@ -1,16 +1,14 @@
 const std = @import("std");
 const File = std.fs.File;
 
-pub const ReturnCodes = enum{
-    Success,
-    Terminated,
-    MaxIterReached,
-    Error
-};
+pub const ReturnCodes = enum { Success, Terminated, MaxIterReached, Error };
 
-pub const SolverErrors = error{
-    NoAllocator
-};
+pub const SolverErrors = error{NoAllocator};
+
+pub fn ProbFnType(comptime T: type, comptime N: usize, comptime P: type) type {
+    const U = [N]T;
+    return fn (du: *U, u: *const U, t: T, p: *P) void;
+}
 
 pub fn Solver(comptime T: type, comptime N: usize) type {
     return struct {
@@ -22,7 +20,7 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
             max_iters: usize = 1000,
             dt: T = @as(T, 0.1),
             save: bool = false,
-            adaptive: bool = false
+            adaptive: bool = false,
         };
 
         pub const Solution = struct {
@@ -54,29 +52,28 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
                     \\ last t  : {e}
                     \\ last u  : {e}
                     \\
-                    , .{self.retcode, self.t[self.t.len-1], self.u[self.u.len-1]}
-                );
+                , .{ self.retcode, self.t[self.t.len - 1], self.u[self.u.len - 1] });
             }
 
-            pub fn saveStep(self: *@This(), t: T, u:*const U) void {
+            pub fn saveStep(self: *@This(), t: T, u: *const U) void {
                 std.debug.assert(self.index < self.t.len);
                 self.t[self.index] = t;
-                for (self.u[self.index]) |*v,i| {
+                for (self.u[self.index]) |*v, i| {
                     v.* = u[i];
                 }
                 self.index += 1;
             }
 
-            pub fn deinit(self: * @This()) void {
+            pub fn deinit(self: *@This()) void {
                 self.allocator.free(self.t);
                 self.allocator.free(self.u);
             }
         };
 
         // function types
-        const StepFn = fn(ptr: *anyopaque, du: *U, uprev: *const U, dt: T, t: T) SolverErrors!void;
-        pub const CallbackFn = fn(ptr: *Self, u: *const U, t: T) void;
-       
+        const StepFn = fn (ptr: *anyopaque, du: *U, uprev: *const U, dt: T, t: T) SolverErrors!void;
+        pub const CallbackFn = fn (ptr: *Self, u: *const U, t: T) void;
+
         ptr: *anyopaque,
         performStep: *const StepFn,
 
@@ -86,44 +83,40 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
         uprev: U = undefined,
 
         allocator: std.mem.Allocator,
-        
+
         pub fn init(
-            pointer: anytype, 
-            comptime stepFn: fn(ptr: @TypeOf(pointer), du: *U, uprev: *const U, dt: T, t: T) SolverErrors!void,
-            allocator: std.mem.Allocator
+            pointer: anytype,
+            comptime stepFn: fn (ptr: @TypeOf(pointer), du: *U, uprev: *const U, dt: T, t: T) SolverErrors!void,
+            allocator: std.mem.Allocator,
         ) Self {
             const Ptr = @TypeOf(pointer);
             const ptr_info = @typeInfo(Ptr);
             const alignment = ptr_info.Pointer.alignment;
             // generating struct to wrap step function
             const gen = struct {
-                fn performStep(ptr: *anyopaque, du: *U, uprev: *const U, dt:T, t:T) SolverErrors!void {
+                fn performStep(ptr: *anyopaque, du: *U, uprev: *const U, dt: T, t: T) SolverErrors!void {
                     const self = @ptrCast(Ptr, @alignCast(alignment, ptr));
-                    return @call(.{.modifier = .always_inline}, stepFn, .{self, du, uprev, dt, t});
+                    return @call(.{ .modifier = .always_inline }, stepFn, .{ self, du, uprev, dt, t });
                 }
             };
 
-            return .{
-                .ptr = pointer,
-                .performStep = gen.performStep,
-                .allocator = allocator
-            };
+            return .{ .ptr = pointer, .performStep = gen.performStep, .allocator = allocator };
         }
-        
+
         pub fn solve(
-            self: *Self, 
-            u: U, 
-            min_time: T, 
-            max_time: T, 
-            comptime config: Config
+            self: *Self,
+            u: U,
+            min_time: T,
+            max_time: T,
+            comptime config: Config,
         ) !Solution {
             // set uprev to initial u
-            for (self.uprev) |*uprev,i| {
+            for (self.uprev) |*uprev, i| {
                 uprev.* = u[i];
             }
             var du: U = .{@as(T, 0.0)} ** N;
             var t: T = min_time;
-            
+
             var solution: Solution = try Solution.init(self.allocator, if (config.save) config.max_iters else 1);
 
             // as of *this* very moment, we're integrating
@@ -172,7 +165,7 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
             return solution;
         }
 
-        fn calcTimeStep(_: * const Self, comptime adaptive: bool, dt: T) T {
+        fn calcTimeStep(_: *const Self, comptime adaptive: bool, dt: T) T {
             _ = adaptive;
             return dt;
         }
