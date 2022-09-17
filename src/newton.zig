@@ -16,8 +16,8 @@ pub fn Newton(comptime T: type, comptime N: usize, comptime P: type) type {
             return .{.prob = prob, .params = params};
         }
 
-        pub fn getSolver(self: *Self) SolverType {
-            return SolverType.init(self, Self.step);
+        pub fn getSolver(self: *Self, allocator: std.mem.Allocator) SolverType {
+            return SolverType.init(self, Self.step, allocator);
         }
 
         pub fn step(self: *Self, du: *U, u: *const U, _: T, t:T) !void {

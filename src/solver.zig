@@ -4,6 +4,7 @@ pub const ReturnCodes = enum{
     Success,
     Terminated,
     MaxIterReached,
+    Error
 };
 
 pub const SolverErrors = error{
@@ -61,11 +62,13 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
         retcode: ?ReturnCodes = null,
 
         uprev: U = undefined,
-        tcurr: T = 0.0,
+
+        allocator: std.mem.Allocator,
         
         pub fn init(
             pointer: anytype, 
-            comptime stepFn: fn(ptr: @TypeOf(pointer), du: *U, uprev: *const U, dt: T, t: T) SolverErrors!void
+            comptime stepFn: fn(ptr: @TypeOf(pointer), du: *U, uprev: *const U, dt: T, t: T) SolverErrors!void,
+            allocator: std.mem.Allocator
         ) Self {
             const Ptr = @TypeOf(pointer);
             const ptr_info = @typeInfo(Ptr);
@@ -81,25 +84,25 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
             return .{
                 .ptr = pointer,
                 .performStep = gen.performStep,
+                .allocator = allocator
             };
         }
         
         pub fn solve(
             self: *Self, 
-            allocator: std.mem.Allocator, 
             u: U, 
             min_time: T, 
             max_time: T, 
             comptime config: Config
         ) !Solution {
-            self.tcurr = min_time;
             // set uprev to initial u
             for (self.uprev) |*uprev,i| {
                 uprev.* = u[i];
             }
             var du: U = .{@as(T, 0.0)} ** N;
+            var t: T = min_time;
             
-            var solution: Solution = try Solution.init(allocator, config.max_iters);
+            var solution: Solution = try Solution.init(self.allocator, config.max_iters);
 
             // as of *this* very moment, we're integrating
             self.is_integrating = true;
@@ -112,15 +115,20 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
                 // calculate next time step
                 dt = self.calcTimeStep(config.adaptive, dt);
                 // do the integration step
-                try self.performStep(self.ptr, &du, &self.uprev, self.tcurr, config.dt);
+                try self.performStep(self.ptr, &du, &self.uprev, t, config.dt);
                 // update u
                 for (self.uprev) |*uprev, i| {
                     uprev.* = uprev.* + config.dt * du[i];
                 }
 
-                if (self.tcurr >= max_time) {
+                if (t >= max_time) {
                     self.is_integrating = false;
                     self.retcode = ReturnCodes.Success;
+                }
+
+                // call the callback function
+                if (config.callback) |cb| {
+                    cb(self, self.uprev, t);
                 }
 
                 if (!self.is_integrating) {
