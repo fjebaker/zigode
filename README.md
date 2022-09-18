@@ -57,7 +57,7 @@ Currently implemented is only the basic fixed step-size Newton method, and Tsito
 The scope of this project is just so I can write a quick weekend relativistic ray tracer in Zig, and so the plan is extremely limited:
 
 - [x] Callback functions
-- [ ] Adaptive step size algorithms
+- [x] Adaptive step size algorithms
 - [ ] Serialise and export solution to known format
 - [ ] Multi-threaded solving
 - [ ] (stretch) Interpolations
