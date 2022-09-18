@@ -72,3 +72,25 @@ test "basic tsit5 lorenz" {
         try file.writer().print("{e}\n", .{v.*});
     }
 }
+
+test "adaptive tsit5 lorenz" {
+    const test_allocator = std.testing.allocator;
+
+    var prob = tsit5.AdaptiveTsit5(f64, 3, NoParams).init(lorenz, .{});
+    var solv = prob.solver(test_allocator);
+
+    var u: [3]f64 = .{ 1.0, 0.0, 0.0 };
+    var sol = try solv.solve(u, 0.0, 100.0, .{ .save = true, .dt = 1e-2 });
+    defer sol.deinit();
+
+    const stdout = std.io.getStdErr();
+    try stdout.writeAll("\n");
+    try sol.printInfo(stdout);
+
+    var file = try std.fs.cwd().openFile("out2.txt", .{ .mode = std.fs.File.OpenMode.write_only });
+    defer file.close();
+
+    for (sol.u) |*v| {
+        try file.writer().print("{e}\n", .{v.*});
+    }
+}

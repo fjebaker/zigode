@@ -34,7 +34,7 @@ pub fn main() !void {
 
     const u: [3]f64 = .{1.0, 0.0, 0.0};
     var sol = try solver.solve(
-        u, 0.0, 100.0, .{.save = true, .dt = 1e-6, .max_iters = 10_000}
+        u, 0.0, 100.0, .{.save = true, .dt = 1e-2, .max_iters = 10_000}
     );
     defer sol.deinit();
 

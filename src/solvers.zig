@@ -3,7 +3,7 @@ const File = std.fs.File;
 
 pub const ReturnCodes = enum { Success, Terminated, MaxIterReached, Error };
 
-pub const SolverErrors = error{NoAllocator};
+pub const SolverErrors = error{ NoAllocator, TimeStepTooSmall, TimeStepTooBig };
 
 pub fn ProbFnType(comptime T: type, comptime N: usize, comptime P: type) type {
     const U = [N]T;
