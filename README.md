@@ -30,7 +30,7 @@ pub fn main() !void {
     var prob = zigode.Tsit5(f64, 3, LorenzParams).init(lorenz, .{});
 
     // get common solver interface
-    var solver = prob.getSolver(gpa.allocator());
+    var solver = prob.solver(gpa.allocator());
 
     const u: [3]f64 = .{1.0, 0.0, 0.0};
     var sol = try solver.solve(

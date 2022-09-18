@@ -53,7 +53,7 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
                     \\ last u       : {e}
                     \\ saved values : {d}
                     \\
-                , .{ self.retcode, self.t[self.index - 1], self.u[self.index - 1], self.index});
+                , .{ self.retcode, self.t[self.index - 1], self.u[self.index - 1], self.index });
             }
 
             pub fn saveStep(self: *@This(), t: T, u: *const U) void {
@@ -97,7 +97,11 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
             const gen = struct {
                 fn performStep(ptr: *anyopaque, uprev: *U, t: T, dt: T) SolverErrors!void {
                     const self = @ptrCast(Ptr, @alignCast(alignment, ptr));
-                    return @call(.{ .modifier = .always_inline }, stepFn, .{ self, uprev, dt, t });
+                    return @call(
+                        .{ .modifier = .always_inline },
+                        stepFn,
+                        .{ self, uprev, dt, t },
+                    );
                 }
             };
 
@@ -117,7 +121,10 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
             }
             var t: T = min_time;
 
-            var solution: Solution = try Solution.init(self.allocator, if (config.save) config.max_iters else 1);
+            var solution: Solution = try Solution.init(
+                self.allocator,
+                if (config.save) config.max_iters else 1,
+            );
 
             // as of *this* very moment, we're integrating
             self.is_integrating = true;

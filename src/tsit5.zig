@@ -89,7 +89,7 @@ pub fn Tsit5(comptime T: type, comptime N: usize, comptime P: type) type {
             return .{ .prob = prob, .params = params };
         }
 
-        pub fn getSolver(self: *Self, allocator: std.mem.Allocator) SolverType {
+        pub fn solver(self: *Self, allocator: std.mem.Allocator) SolverType {
             return SolverType.init(self, Self.step, allocator);
         }
 
