@@ -3,9 +3,10 @@ const testing = std.testing;
 
 pub const NoParams = struct {};
 
-const solver = @import("./solver.zig");
-const newton = @import("./newton.zig");
-const tsit5 = @import("./tsit5.zig");
+pub const solver = @import("./solver.zig");
+pub const newton = @import("./newton.zig");
+pub const tsit5 = @import("./tsit5.zig");
+pub const Tsit5 = tsit5.Tsit5;
 
 fn probFunc(du: *[2]f64, _: *const [2]f64, _: f64, _: *NoParams) void {
     du[0] = 4.0;
@@ -43,7 +44,7 @@ test "basic tsit5 functionality" {
     var solv = prob.getSolver(test_allocator);
 
     var u: [2]f64 = .{ 0.0, 0.0 };
-    var sol = try solv.solve(u, 0.0, 100.0, .{.save = true});
+    var sol = try solv.solve(u, 0.0, 100.0, .{.callback = callback, .save = true});
 
     const stdout = std.io.getStdErr();
     defer sol.deinit();
