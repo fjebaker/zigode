@@ -71,7 +71,7 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
         };
 
         // function types
-        const StepFn = fn (ptr: *anyopaque, du: *U, uprev: *const U, dt: T, t: T) SolverErrors!void;
+        const StepFn = fn (ptr: *anyopaque, uprev: *U, t: T, dt: T) SolverErrors!void;
         pub const CallbackFn = fn (ptr: *Self, u: *const U, t: T) void;
 
         ptr: *anyopaque,
@@ -86,7 +86,7 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
 
         pub fn init(
             pointer: anytype,
-            comptime stepFn: fn (ptr: @TypeOf(pointer), du: *U, uprev: *const U, dt: T, t: T) SolverErrors!void,
+            comptime stepFn: fn (ptr: @TypeOf(pointer), uprev: *U, t: T, dt: T) SolverErrors!void,
             allocator: std.mem.Allocator,
         ) Self {
             const Ptr = @TypeOf(pointer);
@@ -94,9 +94,9 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
             const alignment = ptr_info.Pointer.alignment;
             // generating struct to wrap step function
             const gen = struct {
-                fn performStep(ptr: *anyopaque, du: *U, uprev: *const U, dt: T, t: T) SolverErrors!void {
+                fn performStep(ptr: *anyopaque, uprev: *U, t: T, dt: T) SolverErrors!void {
                     const self = @ptrCast(Ptr, @alignCast(alignment, ptr));
-                    return @call(.{ .modifier = .always_inline }, stepFn, .{ self, du, uprev, dt, t });
+                    return @call(.{ .modifier = .always_inline }, stepFn, .{ self, uprev, dt, t });
                 }
             };
 
@@ -114,7 +114,6 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
             for (self.uprev) |*uprev, i| {
                 uprev.* = u[i];
             }
-            var du: U = .{@as(T, 0.0)} ** N;
             var t: T = min_time;
 
             var solution: Solution = try Solution.init(self.allocator, if (config.save) config.max_iters else 1);
@@ -129,13 +128,11 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
             while (step_counter < config.max_iters) : (step_counter += 1) {
                 // calculate next time step
                 dt = self.calcTimeStep(config.adaptive, dt);
+
                 // do the integration step
-                try self.performStep(self.ptr, &du, &self.uprev, t, config.dt);
-                // update u and t
-                t = t + dt;
-                for (self.uprev) |*uprev, i| {
-                    uprev.* = uprev.* + dt * du[i];
-                }
+                try self.performStep(self.ptr, &self.uprev, t, dt);
+                t += dt;
+
                 // maybe save
                 if (config.save) {
                     solution.saveStep(t, &self.uprev);

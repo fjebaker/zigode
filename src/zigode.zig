@@ -33,3 +33,16 @@ test "basic functionality" {
     try sol.printInfo(stdout);
     defer sol.deinit();
 }
+
+test "basic tsit5 functionality" {
+    var prob = tsit5.Tsit5(f64, 2, NoParams).init(probFunc, .{});
+    const test_allocator = std.testing.allocator;
+    var solv = prob.getSolver(test_allocator);
+
+    var u: [2]f64 = .{ 0.0, 0.0 };
+    var sol = try solv.solve(u, 0.0, 100.0, .{ .callback = callback });
+    const stdout = std.io.getStdErr();
+    try stdout.writeAll("\n");
+    try sol.printInfo(stdout);
+    defer sol.deinit();
+}
