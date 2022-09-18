@@ -1,12 +1,13 @@
 const std = @import("std");
 const testing = std.testing;
 
-pub const NoParams = struct {};
-
-pub const solver = @import("./solvers.zig");
-pub const newton = @import("./newton.zig");
-pub const tsit5 = @import("./tsit5.zig");
+const solver = @import("./solvers.zig");
+const newton = @import("./newton.zig");
+const tsit5 = @import("./tsit5.zig");
 pub const Tsit5 = tsit5.Tsit5;
+pub const AdaptiveTsit5 = tsit5.AdaptiveTsit5;
+pub const Solver = solver.Solver;
+pub const NoParams = struct {};
 
 fn probFunc(du: *[2]f64, _: *const [2]f64, _: f64, _: *NoParams) void {
     du[0] = 4.0;
@@ -54,7 +55,7 @@ test "basic tsit5 functionality" {
 test "basic tsit5 lorenz" {
     const test_allocator = std.testing.allocator;
 
-    var prob = tsit5.Tsit5(f64, 3, NoParams).init(lorenz, .{});
+    var prob = Tsit5(f64, 3, NoParams).init(lorenz, .{});
     var solv = prob.solver(test_allocator);
 
     var u: [3]f64 = .{ 1.0, 0.0, 0.0 };
@@ -76,7 +77,7 @@ test "basic tsit5 lorenz" {
 test "adaptive tsit5 lorenz" {
     const test_allocator = std.testing.allocator;
 
-    var prob = tsit5.AdaptiveTsit5(f64, 3, NoParams).init(lorenz, .{});
+    var prob = AdaptiveTsit5(f64, 3, NoParams).init(lorenz, .{});
     var solv = prob.solver(test_allocator);
 
     var u: [3]f64 = .{ 1.0, 0.0, 0.0 };

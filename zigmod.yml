@@ -1,0 +1,6 @@
+id: ygvi9aigu63axsj297qiliipay2zzu8s3mwy6ywvvcuauf98
+name: zigode
+main: src/zigode.zig
+license: MIT
+description: Ordinary differential equation solving in Zig.
+dependencies:
