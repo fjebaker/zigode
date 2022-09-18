@@ -1,7 +1,7 @@
 const std = @import("std");
 const File = std.fs.File;
 
-pub const ReturnCodes = enum{ Success, Terminated, MaxIterReached, Error };
+pub const ReturnCodes = enum { Success, Terminated, MaxIterReached, Error };
 
 pub const SolverErrors = error{ NoAllocator, TimeStepTooSmall, TimeStepTooBig };
 
@@ -10,18 +10,13 @@ pub fn ProbFnType(comptime T: type, comptime N: usize, comptime P: type) type {
     return fn (du: *U, u: *const U, t: T, p: *P) void;
 }
 
-pub fn StepFnType(comptime P: type, comptime T: type, comptime N: usize) type {
-    const U = [N]T;
-    return fn (ptr: P, uprev: *U, t: T, dt: T) SolverErrors!T;
-}
-
 pub fn Solver(comptime T: type, comptime N: usize, comptime P: type) type {
     return struct {
         pub const Self = @This();
         pub const U = [N]T;
 
         pub const Config = struct {
-            callback: ?*const CallbackFn = null,
+            callback: ?*const CallbackFnProto = null,
             max_iters: usize = 10_000,
             dt: T = @as(T, 0.1),
             save: bool = false,
@@ -76,23 +71,31 @@ pub fn Solver(comptime T: type, comptime N: usize, comptime P: type) type {
         };
 
         // function types
-        const StepFn = StepFnType(*anyopaque, T, N);
-        pub const CallbackFn = fn (ptr: *Self, u: *const U, t: T, p: *P) void;
+        const StepFnProto = fn (*anyopaque, *Self) SolverErrors!void;
+        pub const CallbackFnProto = fn (ptr: *Self, u: *const U, t: T, p: *P) void;
 
         ptr: *anyopaque,
-        performStep: *const StepFn,
+        performStep: *const StepFnProto,
 
         is_integrating: bool = false,
         retcode: ?ReturnCodes = null,
 
-        uprev: U = undefined,
-        params: *P = undefined,
-
         allocator: std.mem.Allocator,
+
+        // solving variables
+        uprev: U = undefined, // previous u
+        u: U = undefined, // current u
+        params: *P = undefined,
+        t: T = 0.0,
+        dt: T = undefined,
+        dt_proposed: T = undefined,
+        step_count: T = undefined,
+
+        config: Config = undefined,
 
         pub fn init(
             pointer: anytype,
-            comptime stepFn: StepFnType(@TypeOf(pointer), T, N),
+            comptime stepFn: fn (@TypeOf(pointer), *Self) SolverErrors!void,
             allocator: std.mem.Allocator,
         ) Self {
             const Ptr = @TypeOf(pointer);
@@ -101,16 +104,17 @@ pub fn Solver(comptime T: type, comptime N: usize, comptime P: type) type {
 
             // generating struct to wrap step function
             const gen = struct {
-                fn performStep(ptr: *anyopaque, uprev: *U, t: T, dt: T) SolverErrors!T {
+                fn performStep(ptr: *anyopaque, solver_self: *Self) SolverErrors!void {
                     const self = @ptrCast(Ptr, @alignCast(alignment, ptr));
-                    return @call(
+                    try @call(
                         .{ .modifier = .always_inline },
                         stepFn,
-                        .{ self, uprev, t, dt },
+                        .{ self, solver_self },
                     );
                 }
             };
 
+            // need access to params for the callback
             const params = &(@ptrCast(Ptr, @alignCast(alignment, pointer)).params);
             return .{ .ptr = pointer, .performStep = gen.performStep, .allocator = allocator, .params = params };
         }
@@ -122,62 +126,64 @@ pub fn Solver(comptime T: type, comptime N: usize, comptime P: type) type {
             max_time: T,
             comptime config: Config,
         ) !Solution {
+            // save variables
+            self.config = config;
+            self.u = u;
+            self.dt = config.dt;
+            self.dt_proposed = self.dt;
+            self.t = min_time;
+            self.step_count = 0;
             // set uprev to initial u
             for (self.uprev) |*uprev, i| {
                 uprev.* = u[i];
             }
-            var t: T = min_time;
 
+            // initialise our solution storage
             var solution: Solution = try Solution.init(
                 self.allocator,
                 if (config.save) config.max_iters else 1,
             );
+            errdefer solution.deinit();
 
             // as of *this* very moment, we're integrating
             self.is_integrating = true;
-            // if we encounter an error, be sure to set this to false
-            errdefer self.is_integrating = false;
+            defer self.is_integrating = false;
 
-            // need to know second to last for saving
-            var saved_u : U = .{0.0} ** N;
-
-            var dt: T = config.dt;
-            var step_counter: usize = 0;
-            while (step_counter < config.max_iters) : (step_counter += 1) {
+            while (self.step_count < config.max_iters) : (self.step_count += 1) {
                 // maybe save
                 if (config.save) {
-                    solution.saveStep(t, &self.uprev);
+                    solution.saveStep(self.t, &self.u);
                 }
 
                 // do the integration step
-                dt = try self.performStep(self.ptr, &self.uprev, t, dt);
-                t += dt;
+                try self.performStep(self.ptr, self);
 
-                if (t >= max_time) {
+                // increment with proposed dt
+                self.dt = self.dt_proposed;
+                self.t += self.dt;
+
+                if (self.t >= max_time) {
                     self.is_integrating = false;
                     self.retcode = ReturnCodes.Success;
                 }
 
                 // call the callback function
                 if (config.callback) |cb| {
-                    cb(self, &self.uprev, t, self.params);
+                    cb(self, &self.u, self.t, self.params);
                 }
 
                 if (!self.is_integrating) {
                     break;
                 } else {
-                    // update the one we save at the end
-                    for (saved_u) |*v,i| {
-                        v.* = self.uprev[i];
+                    for (self.uprev) |*v, i| {
+                        v.* = self.u[i];
                     }
                 }
             } else self.retcode = ReturnCodes.MaxIterReached;
-            // and now we have stopped
-            self.is_integrating = false;
 
             if (!config.save) {
                 // just save the last good value
-                solution.saveStep(t, &saved_u);
+                solution.saveStep(self.t, &self.uprev);
             }
 
             solution.retcode = self.retcode;

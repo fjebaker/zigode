@@ -76,14 +76,15 @@ fn common_step(
     self: anytype,
     comptime T: type,
     comptime N: usize,
-    uprev: *[N]T,
+    u: *[N]T,
+    uprev: *const [N]T,
     t: T,
     dt: T,
 ) void {
     const Self = @typeInfo(@TypeOf(self)).Pointer.child;
     var temp: [N]T = .{0.0} ** N;
     // k0
-    self.prob(&self.k[0], uprev, t, &self.params);
+    // self.prob(&self.k[0], uprev, t, &self.params);
     for (temp) |*v, i| {
         v.* = uprev[i] + dt * Self.coeff.a[0] * self.k[0][i];
     }
@@ -120,7 +121,7 @@ fn common_step(
     // k5
     self.prob(&self.k[5], &temp, t + dt, &self.params);
     // now assign to previous u value
-    for (uprev) |*v, i| {
+    for (u) |*v, i| {
         v.* = uprev[i] + dt * (Self.coeff.a[15] * self.k[0][i] +
             Self.coeff.a[16] * self.k[1][i] +
             Self.coeff.a[17] * self.k[2][i] +
@@ -129,7 +130,7 @@ fn common_step(
             Self.coeff.a[20] * self.k[5][i]);
     }
     //k6
-    self.prob(&self.k[6], uprev, t + dt, &self.params);
+    self.prob(&self.k[6], u, t + dt, &self.params);
 }
 
 pub fn Tsit5(comptime T: type, comptime N: usize, comptime P: type) type {
@@ -153,9 +154,16 @@ pub fn Tsit5(comptime T: type, comptime N: usize, comptime P: type) type {
             return SolverType.init(self, Self.step, allocator);
         }
 
-        pub fn step(self: *Self, uprev: *U, t: T, dt: T) !T {
-            common_step(self, T, N, uprev, t, dt);
-            return dt;
+        pub fn step(self: *Self, solv: *SolverType) !void {
+            const uprev = &solv.uprev;
+            const dt = solv.dt;
+            const t = solv.t;
+            var u = &solv.u;
+            // FSAL First Stage (same) As Last
+            for (self.k[0]) |*v, i| {
+                v.* = self.k[6][i];
+            }
+            common_step(self, T, N, u, uprev, t, dt);
         }
     };
 }
@@ -177,7 +185,9 @@ pub fn AdaptiveTsit5(comptime T: type, comptime N: usize, comptime P: type) type
         abstol: T = 1e-6,
         reltol: T = 1e-6,
         dtmin: T = 1e-12,
+        dtmax: T = 10.0,
         q_old: T = 0.0,
+
         const q_max: T = 10.0;
         const q_min: T = 1.0 / 5.0;
         const q_old_init = 1e-4;
@@ -193,12 +203,21 @@ pub fn AdaptiveTsit5(comptime T: type, comptime N: usize, comptime P: type) type
             return SolverType.init(self, Self.step, allocator);
         }
 
-        pub fn step(self: *Self, uprev: *U, t: T, dtprev: T) !T {
-            const uprev_abs = self.abs(uprev);
+        pub fn step(self: *Self, solv: *SolverType) !void {
             var error_estimate = std.math.floatMax(T);
-            var dt: T = dtprev;
+            // unpack from solver
+            var u = &solv.u;
+            const uprev = &solv.uprev;
+            var dt = solv.dt;
+            const t = solv.t;
+            // init scope variables
             var p: T = 0.0;
             var q: T = 0.0;
+
+            // FSAL First Stage (same) As Last
+            for (self.k[0]) |*v, i| {
+                v.* = self.k[6][i];
+            }
 
             while (error_estimate > 1.0) : (dt = dt / std.math.min(
                 1.0 / Self.q_min,
@@ -207,10 +226,7 @@ pub fn AdaptiveTsit5(comptime T: type, comptime N: usize, comptime P: type) type
                 if (dt < self.dtmin) {
                     return error.TimeStepTooSmall;
                 }
-
-                common_step(self, T, N, uprev, t, dt);
-                // find largest value in u
-                const u_abs = self.abs(uprev);
+                common_step(self, T, N, u, uprev, t, dt);
 
                 var temp: U = .{0.0} ** N;
                 for (temp) |*v, i| {
@@ -221,7 +237,7 @@ pub fn AdaptiveTsit5(comptime T: type, comptime N: usize, comptime P: type) type
                         Self.coeff.b[4] * self.k[4][i] +
                         Self.coeff.b[5] * self.k[5][i] +
                         Self.coeff.b[6] * self.k[6][i]);
-                    const max = std.math.max(uprev_abs[i], u_abs[i]);
+                    const max = std.math.max(@fabs(u[i]), @fabs(uprev[i]));
                     v.* /= self.abstol + max * self.reltol;
                 }
 
@@ -233,17 +249,26 @@ pub fn AdaptiveTsit5(comptime T: type, comptime N: usize, comptime P: type) type
                     p = std.math.pow(T, error_estimate, Self.beta1);
                     q = p / std.math.pow(T, self.q_old, Self.beta2);
                 }
+
+                // std.debug.print("dt: {e}\n", .{dt});
             }
+            // std.debug.print("\n", .{});
 
             q = std.math.max(
                 1.0 / Self.q_max,
                 std.math.min(1.0 / Self.q_min, q / Self.gamma),
             );
             self.q_old = std.math.max(error_estimate, Self.q_old_init);
-            return dt / q;
+            dt = @fabs(dt / q);
+
+            if (dt > self.dtmax) {
+                dt = self.dtmax;
+            }
+
+            solv.dt_proposed = dt;
         }
 
-        fn abs(_: *Self, u: *U) U {
+        fn abs(_: *Self, u: *const U) U {
             var out: U = .{0.0} ** N;
             for (out) |*v, i| {
                 v.* = @fabs(u[i]);
@@ -251,12 +276,12 @@ pub fn AdaptiveTsit5(comptime T: type, comptime N: usize, comptime P: type) type
             return out;
         }
 
-        fn norm(_: *Self, t: *U) T {
+        fn norm(_: *Self, t: *const U) T {
             var ssum: T = 0.0;
             for (t) |v| {
-                ssum += v * v;
+                ssum += std.math.pow(T, v, 2);
             }
-            return @sqrt(ssum);
+            return @sqrt(ssum / @as(T, t.len));
         }
     };
 }
