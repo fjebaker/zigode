@@ -46,7 +46,7 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
 
             pub fn printInfo(self: *const @This(), f: File) !void {
                 try f.writer().print(
-                    \\ ZigODE Solution:
+                    \\ ODE⚡Solution:
                     \\ ~~~~~~~~~~~~~~~~
                     \\ retcode      : {?}
                     \\ last t       : {e}

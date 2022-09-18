@@ -1,4 +1,4 @@
-# ODEZig
+# Zigode 
 
 Ordinary differential equation solving in pure Zig and almost entirely on the stack! Tiny weekend project, will probably not be actively maintained.
 
@@ -6,7 +6,7 @@ Ordinary differential equation solving in pure Zig and almost entirely on the st
 
 ```zig
 const std = @import("std");
-const odezig = @import("odezig");
+const zigode = @import("zigode");
 
 // define problem
 fn lorenz(du: *[3]f64, u: *const [3]f64, _: f64, p: *LorenzParams) void {
@@ -27,14 +27,14 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     // need to tell the solver the datatype and length of array
     // so that everything can be stack allocated
-    var prob = odezig.Tsit5(f64, 3, LorenzParams).init(lorenz, .{});
+    var prob = zigode.Tsit5(f64, 3, LorenzParams).init(lorenz, .{});
 
     // get common solver interface
     var solver = prob.getSolver(gpa.allocator());
 
     const u: [3]f64 = .{1.0, 0.0, 0.0};
     var sol = try solver.solve(
-        u, 0.0, 100.0, .{.save = true, .dt = 1e-5, .max_iters = 10_000}
+        u, 0.0, 100.0, .{.save = true, .dt = 1e-6, .max_iters = 10_000}
     );
     defer sol.deinit();
 

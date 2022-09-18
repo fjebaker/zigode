@@ -3,7 +3,7 @@ const testing = std.testing;
 
 pub const NoParams = struct {};
 
-pub const solver = @import("./solver.zig");
+pub const solver = @import("./solvers.zig");
 pub const newton = @import("./newton.zig");
 pub const tsit5 = @import("./tsit5.zig");
 pub const Tsit5 = tsit5.Tsit5;

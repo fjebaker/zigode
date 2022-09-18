@@ -1,13 +1,13 @@
 const std = @import("std");
-const solver = @import("./solver.zig");
-const Solver = solver.Solver;
+const solvers = @import("./solvers.zig");
+const Solver = solvers.Solver;
 
 pub fn Newton(comptime T: type, comptime N: usize, comptime P: type) type {
     return struct {
         const Self = @This();
         const SolverType = Solver(T, N);
         const U = SolverType.U;
-        const ProbFn = solver.ProbFnType(T, N, P);
+        const ProbFn = solvers.ProbFnType(T, N, P);
 
         prob: *const ProbFn,
         params: P,
