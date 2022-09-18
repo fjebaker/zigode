@@ -15,7 +15,7 @@ pub fn StepFnType(comptime P: type, comptime T: type, comptime N: usize) type {
     return fn (ptr: P, uprev: *U, t: T, dt: T) SolverErrors!T;
 }
 
-pub fn Solver(comptime T: type, comptime N: usize) type {
+pub fn Solver(comptime T: type, comptime N: usize, comptime P: type) type {
     return struct {
         pub const Self = @This();
         pub const U = [N]T;
@@ -77,7 +77,7 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
 
         // function types
         const StepFn = StepFnType(*anyopaque, T, N);
-        pub const CallbackFn = fn (ptr: *Self, u: *const U, t: T) void;
+        pub const CallbackFn = fn (ptr: *Self, u: *const U, t: T, p: *P) void;
 
         ptr: *anyopaque,
         performStep: *const StepFn,
@@ -86,6 +86,7 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
         retcode: ?ReturnCodes = null,
 
         uprev: U = undefined,
+        params: *P = undefined,
 
         allocator: std.mem.Allocator,
 
@@ -97,6 +98,7 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
             const Ptr = @TypeOf(pointer);
             const ptr_info = @typeInfo(Ptr);
             const alignment = ptr_info.Pointer.alignment;
+
             // generating struct to wrap step function
             const gen = struct {
                 fn performStep(ptr: *anyopaque, uprev: *U, t: T, dt: T) SolverErrors!T {
@@ -109,7 +111,8 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
                 }
             };
 
-            return .{ .ptr = pointer, .performStep = gen.performStep, .allocator = allocator };
+            const params = &(@ptrCast(Ptr, @alignCast(alignment, pointer)).params);
+            return .{ .ptr = pointer, .performStep = gen.performStep, .allocator = allocator, .params = params };
         }
 
         pub fn solve(
@@ -154,7 +157,7 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
 
                 // call the callback function
                 if (config.callback) |cb| {
-                    cb(self, &self.uprev, t);
+                    cb(self, &self.uprev, t, self.params);
                 }
 
                 if (!self.is_integrating) {

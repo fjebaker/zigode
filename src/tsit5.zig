@@ -135,7 +135,7 @@ fn common_step(
 pub fn Tsit5(comptime T: type, comptime N: usize, comptime P: type) type {
     return struct {
         const Self = @This();
-        const SolverType = Solver(T, N);
+        const SolverType = Solver(T, N, P);
         const U = SolverType.U;
         const ProbFn = solvers.ProbFnType(T, N, P);
 
@@ -163,7 +163,7 @@ pub fn Tsit5(comptime T: type, comptime N: usize, comptime P: type) type {
 pub fn AdaptiveTsit5(comptime T: type, comptime N: usize, comptime P: type) type {
     return struct {
         const Self = @This();
-        const SolverType = Solver(T, N);
+        const SolverType = Solver(T, N, P);
         const U = SolverType.U;
         const ProbFn = solvers.ProbFnType(T, N, P);
 

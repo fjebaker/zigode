@@ -13,7 +13,7 @@ fn probFunc(du: *[2]f64, _: *const [2]f64, _: f64, _: *NoParams) void {
     du[0] = 4.0;
 }
 
-fn callback(s: *solver.Solver(f64, 2), u: *const [2]f64, _: f64) void {
+fn callback(s: *solver.Solver(f64, 2, NoParams), u: *const [2]f64, _: f64, _: *NoParams) void {
     if (u[0] > 40) {
         s.terminate();
     }
