@@ -1,7 +1,7 @@
 const std = @import("std");
 const File = std.fs.File;
 
-pub const ReturnCodes = enum { Success, Terminated, MaxIterReached, Error };
+pub const ReturnCodes = enum{ Success, Terminated, MaxIterReached, Error };
 
 pub const SolverErrors = error{ NoAllocator, TimeStepTooSmall, TimeStepTooBig };
 
@@ -138,17 +138,20 @@ pub fn Solver(comptime T: type, comptime N: usize, comptime P: type) type {
             // if we encounter an error, be sure to set this to false
             errdefer self.is_integrating = false;
 
+            // need to know second to last for saving
+            var saved_u : U = .{0.0} ** N;
+
             var dt: T = config.dt;
             var step_counter: usize = 0;
             while (step_counter < config.max_iters) : (step_counter += 1) {
-                // do the integration step
-                dt = try self.performStep(self.ptr, &self.uprev, t, dt);
-                t += dt;
-
                 // maybe save
                 if (config.save) {
                     solution.saveStep(t, &self.uprev);
                 }
+
+                // do the integration step
+                dt = try self.performStep(self.ptr, &self.uprev, t, dt);
+                t += dt;
 
                 if (t >= max_time) {
                     self.is_integrating = false;
@@ -162,14 +165,19 @@ pub fn Solver(comptime T: type, comptime N: usize, comptime P: type) type {
 
                 if (!self.is_integrating) {
                     break;
+                } else {
+                    // update the one we save at the end
+                    for (saved_u) |*v,i| {
+                        v.* = self.uprev[i];
+                    }
                 }
             } else self.retcode = ReturnCodes.MaxIterReached;
             // and now we have stopped
             self.is_integrating = false;
 
             if (!config.save) {
-                // just save the last value
-                solution.saveStep(t, &self.uprev);
+                // just save the last good value
+                solution.saveStep(t, &saved_u);
             }
 
             solution.retcode = self.retcode;
