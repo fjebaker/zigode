@@ -93,7 +93,7 @@ pub fn Tsit5(comptime T: type, comptime N: usize, comptime P: type) type {
             return SolverType.init(self, Self.step, allocator);
         }
 
-        pub fn step(self: *Self, uprev: *U, t: T, dt: T) !void {
+        pub fn step(self: *Self, uprev: *U, t: T, dt: T) !T {
             var temp: U = .{0.0} ** N;
             // k0
             self.prob(&self.k[0], uprev, t, &self.params);
@@ -126,6 +126,8 @@ pub fn Tsit5(comptime T: type, comptime N: usize, comptime P: type) type {
             for (uprev) |*v, i| {
                 v.* = uprev[i] + dt * (Self.coeff.a[15] * self.k[0][i] + Self.coeff.a[16] * self.k[1][i] + Self.coeff.a[17] * self.k[2][i] + Self.coeff.a[18] * self.k[3][i] + Self.coeff.a[19] * self.k[4][i] + Self.coeff.a[20] * self.k[5][i]);
             }
+
+            return dt;
         }
     };
 }

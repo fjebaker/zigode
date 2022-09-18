@@ -10,6 +10,11 @@ pub fn ProbFnType(comptime T: type, comptime N: usize, comptime P: type) type {
     return fn (du: *U, u: *const U, t: T, p: *P) void;
 }
 
+pub fn StepFnType(comptime P: type, comptime T: type, comptime N: usize) type {
+    const U = [N]T;
+    return fn (ptr: P, uprev: *U, t: T, dt: T) SolverErrors!T;
+}
+
 pub fn Solver(comptime T: type, comptime N: usize) type {
     return struct {
         pub const Self = @This();
@@ -20,7 +25,6 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
             max_iters: usize = 10_000,
             dt: T = @as(T, 0.1),
             save: bool = false,
-            adaptive: bool = false,
         };
 
         pub const Solution = struct {
@@ -72,7 +76,7 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
         };
 
         // function types
-        const StepFn = fn (ptr: *anyopaque, uprev: *U, t: T, dt: T) SolverErrors!void;
+        const StepFn = StepFnType(*anyopaque, T, N);
         pub const CallbackFn = fn (ptr: *Self, u: *const U, t: T) void;
 
         ptr: *anyopaque,
@@ -87,7 +91,7 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
 
         pub fn init(
             pointer: anytype,
-            comptime stepFn: fn (ptr: @TypeOf(pointer), uprev: *U, t: T, dt: T) SolverErrors!void,
+            comptime stepFn: StepFnType(@TypeOf(pointer), T, N),
             allocator: std.mem.Allocator,
         ) Self {
             const Ptr = @TypeOf(pointer);
@@ -95,12 +99,12 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
             const alignment = ptr_info.Pointer.alignment;
             // generating struct to wrap step function
             const gen = struct {
-                fn performStep(ptr: *anyopaque, uprev: *U, t: T, dt: T) SolverErrors!void {
+                fn performStep(ptr: *anyopaque, uprev: *U, t: T, dt: T) SolverErrors!T {
                     const self = @ptrCast(Ptr, @alignCast(alignment, ptr));
                     return @call(
                         .{ .modifier = .always_inline },
                         stepFn,
-                        .{ self, uprev, dt, t },
+                        .{ self, uprev, t, dt },
                     );
                 }
             };
@@ -134,11 +138,8 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
             var dt: T = config.dt;
             var step_counter: usize = 0;
             while (step_counter < config.max_iters) : (step_counter += 1) {
-                // calculate next time step
-                dt = self.calcTimeStep(config.adaptive, dt);
-
                 // do the integration step
-                try self.performStep(self.ptr, &self.uprev, t, dt);
+                dt = try self.performStep(self.ptr, &self.uprev, t, dt);
                 t += dt;
 
                 // maybe save
@@ -170,11 +171,6 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
 
             solution.retcode = self.retcode;
             return solution;
-        }
-
-        fn calcTimeStep(_: *const Self, comptime adaptive: bool, dt: T) T {
-            _ = adaptive;
-            return dt;
         }
 
         pub fn terminate(self: *Self) void {

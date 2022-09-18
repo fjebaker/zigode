@@ -20,13 +20,15 @@ pub fn Newton(comptime T: type, comptime N: usize, comptime P: type) type {
             return SolverType.init(self, Self.step, allocator);
         }
 
-        pub fn step(self: *Self, uprev: *U, t: T, dt: T) !void {
+        pub fn step(self: *Self, uprev: *U, t: T, dt: T) !T {
             var du: U = .{@as(T, 0.0)} ** N;
             self.prob(&du, uprev, t, &self.params);
             // update previous
             for (uprev) |*u, i| {
                 u.* = u.* + dt * du[i];
             }
+
+            return dt;
         }
     };
 }

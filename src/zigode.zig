@@ -58,7 +58,7 @@ test "basic tsit5 lorenz" {
     var solv = prob.solver(test_allocator);
 
     var u: [3]f64 = .{ 1.0, 0.0, 0.0 };
-    var sol = try solv.solve(u, 0.0, 2.0, .{ .save = true, .dt = 0.000001 });
+    var sol = try solv.solve(u, 0.0, 100.0, .{ .save = true, .dt = 1e-2 });
     defer sol.deinit();
 
     const stdout = std.io.getStdErr();
