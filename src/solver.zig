@@ -17,7 +17,7 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
 
         pub const Config = struct {
             callback: ?*const CallbackFn = null,
-            max_iters: usize = 1000,
+            max_iters: usize = 10_000,
             dt: T = @as(T, 0.1),
             save: bool = false,
             adaptive: bool = false,
@@ -48,11 +48,12 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
                 try f.writer().print(
                     \\ ZigODE Solution:
                     \\ ~~~~~~~~~~~~~~~~
-                    \\ retcode : {?}
-                    \\ last t  : {e}
-                    \\ last u  : {e}
+                    \\ retcode      : {?}
+                    \\ last t       : {e}
+                    \\ last u       : {e}
+                    \\ saved values : {d}
                     \\
-                , .{ self.retcode, self.t[self.t.len - 1], self.u[self.u.len - 1] });
+                , .{ self.retcode, self.t[self.index - 1], self.u[self.index - 1], self.index});
             }
 
             pub fn saveStep(self: *@This(), t: T, u: *const U) void {
@@ -155,8 +156,10 @@ pub fn Solver(comptime T: type, comptime N: usize) type {
             // and now we have stopped
             self.is_integrating = false;
 
-            // just save the last value
-            solution.saveStep(t, &self.uprev);
+            if (!config.save) {
+                // just save the last value
+                solution.saveStep(t, &self.uprev);
+            }
 
             solution.retcode = self.retcode;
             return solution;
