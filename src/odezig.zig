@@ -37,12 +37,14 @@ test "basic functionality" {
     defer sol.deinit();
 }
 test "basic tsit5 functionality" {
-    var prob = tsit5.Tsit5(f64, 2, NoParams).init(probFunc, .{});
     const test_allocator = std.testing.allocator;
+
+    var prob = tsit5.Tsit5(f64, 2, NoParams).init(probFunc, .{});
     var solv = prob.getSolver(test_allocator);
 
     var u: [2]f64 = .{ 0.0, 0.0 };
     var sol = try solv.solve(u, 0.0, 100.0, .{.save = true});
+
     const stdout = std.io.getStdErr();
     defer sol.deinit();
     try stdout.writeAll("\n");
@@ -50,14 +52,16 @@ test "basic tsit5 functionality" {
 }
 
 test "basic tsit5 lorenz" {
-    var prob = tsit5.Tsit5(f64, 3, NoParams).init(lorenz, .{});
     const test_allocator = std.testing.allocator;
+
+    var prob = tsit5.Tsit5(f64, 3, NoParams).init(lorenz, .{});
     var solv = prob.getSolver(test_allocator);
 
     var u: [3]f64 = .{ 1.0, 0.0, 0.0 };
     var sol = try solv.solve(u, 0.0, 2.0, .{.save = true, .dt = 0.000001});
-    const stdout = std.io.getStdErr();
     defer sol.deinit();
+
+    const stdout = std.io.getStdErr();
     try stdout.writeAll("\n");
     try sol.printInfo(stdout);
 
