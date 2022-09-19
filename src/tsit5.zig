@@ -182,8 +182,8 @@ pub fn AdaptiveTsit5(comptime T: type, comptime N: usize, comptime P: type) type
         k: [7]U = .{.{@as(T, 0.0)} ** N} ** 7,
 
         // stepsize control
-        abstol: T = 1e-6,
-        reltol: T = 1e-6,
+        abstol: T = 1e-8,
+        reltol: T = 1e-8,
         dtmin: T = 1e-12,
         dtmax: T = 10.0,
         q_old: T = 0.0,
@@ -249,10 +249,7 @@ pub fn AdaptiveTsit5(comptime T: type, comptime N: usize, comptime P: type) type
                     p = std.math.pow(T, error_estimate, Self.beta1);
                     q = p / std.math.pow(T, self.q_old, Self.beta2);
                 }
-
-                // std.debug.print("dt: {e}\n", .{dt});
             }
-            // std.debug.print("\n", .{});
 
             q = std.math.max(
                 1.0 / Self.q_max,
