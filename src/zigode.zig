@@ -95,3 +95,18 @@ test "adaptive tsit5 lorenz" {
         try file.writer().print("{e}\n", .{v.*});
     }
 }
+
+// test "interpolated tsit5 functionality" {
+//     const test_allocator = std.testing.allocator;
+
+//     var prob = AdaptiveTsit5(f64, 2, NoParams).init(probFunc, .{});
+//     var solv = prob.solver(test_allocator);
+
+//     var u: [2]f64 = .{ 0.0, 0.0 };
+//     var sol = try solv.solve(u, 0.0, 100.0, .{ .interpolated_callback = callback, .save = true });
+
+//     const stdout = std.io.getStdErr();
+//     defer sol.deinit();
+//     try stdout.writeAll("\n");
+//     try sol.printInfo(stdout);
+// }

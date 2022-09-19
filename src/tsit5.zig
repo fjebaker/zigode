@@ -2,6 +2,15 @@ const std = @import("std");
 const solvers = @import("./solvers.zig");
 const Solver = solvers.Solver;
 
+fn evalPoly(comptime T: type, x: T, coef1: T, coef2: T, coef3: T, coef4: T, coef5: T) T {
+    const pow = std.math.pow;
+    return coef1 * x +
+        pow(T, x, 2) * coef2 +
+        pow(T, x, 3) * coef3 +
+        pow(T, x, 4) * coef4 +
+        pow(T, x, 5) * coef5;
+}
+
 fn Coefficients(comptime T: type) type {
     return struct {
         const c = [_]T{
@@ -180,6 +189,8 @@ pub fn AdaptiveTsit5(comptime T: type, comptime N: usize, comptime P: type) type
         prob: *const ProbFn,
         params: P,
         k: [7]U = .{.{@as(T, 0.0)} ** N} ** 7,
+        // interpolant coefficients
+        beta: [7]T = .{0.0} ** 7,
 
         // stepsize control
         abstol: T = 1e-8,
@@ -263,6 +274,31 @@ pub fn AdaptiveTsit5(comptime T: type, comptime N: usize, comptime P: type) type
             }
 
             solv.dt_proposed = dt;
+        }
+
+        pub fn interpolate(self: *Self, solv: *SolverType, uout: *U, t: T) !void {
+            const theta = (t - solv.t) / solv.dt;
+            self.calcBetas(theta);
+            for (uout) |*v, i| {
+                v.* = solv.uprev[i] + solv.dt *
+                    (self.beta[0] * self.k[0][i] +
+                    self.beta[1] * self.k[1][i] +
+                    self.beta[2] * self.k[2][i] +
+                    self.beta[3] * self.k[3][i] +
+                    self.beta[4] * self.k[4][i] +
+                    self.beta[5] * self.k[5][i] +
+                    self.beta[6] * self.k[6][i]);
+            }
+        }
+
+        fn calcBetas(self: *Self, theta: T) void {
+            const r = Self.coeff.r;
+            self.beta[0] = evalPoly(T, theta, 0.0, r[0], r[1], r[2], r[3]);
+            self.beta[1] = evalPoly(T, theta, 0.0, 0.0, r[4], r[5], r[6]);
+            self.beta[2] = evalPoly(T, theta, 0.0, 0.0, r[7], r[8], r[9]);
+            self.beta[4] = evalPoly(T, theta, 0.0, 0.0, r[10], r[11], r[12]);
+            self.beta[5] = evalPoly(T, theta, 0.0, 0.0, r[13], r[14], r[15]);
+            self.beta[6] = evalPoly(T, theta, 0.0, 0.0, r[16], r[17], r[18]);
         }
 
         fn abs(_: *Self, u: *const U) U {
