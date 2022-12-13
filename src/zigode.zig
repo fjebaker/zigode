@@ -7,14 +7,14 @@ const tsit5 = @import("./tsit5.zig");
 pub const Tsit5 = tsit5.Tsit5;
 pub const AdaptiveTsit5 = tsit5.AdaptiveTsit5;
 pub const Solver = solver.Solver;
-pub const NoParams = struct {};
+pub const NoParams = struct { _: usize = 0 };
 
 fn probFunc(du: *[2]f64, _: *const [2]f64, _: f64, _: *NoParams) void {
     du[0] = 4.0;
 }
 
-fn callback(s: *solver.Solver(f64, 2, NoParams), u: *const [2]f64, _: f64, _: *NoParams) void {
-    if (u[0] > 40) {
+fn callback(s: *solver.Solver([2]f64, NoParams), u: *const [2]f64, _: f64, _: *NoParams) void {
+    if (u[0] > 10) {
         s.terminate();
     }
 }
@@ -26,36 +26,42 @@ fn lorenz(du: *[3]f64, u: *const [3]f64, _: f64, _: *NoParams) void {
 }
 
 test "basic functionality" {
-    var prob = newton.Newton(f64, 2, NoParams).init(probFunc, .{});
+    var prob = newton.Newton(probFunc, NoParams).init(.{});
     const test_allocator = std.testing.allocator;
     var solv = prob.solver(test_allocator);
 
     var u: [2]f64 = .{ 0.0, 0.0 };
     var sol = try solv.solve(u, 0.0, 100.0, .{});
-    const stdout = std.io.getStdErr();
-    try stdout.writeAll("\n");
-    try sol.printInfo(stdout);
     defer sol.deinit();
 }
-test "basic tsit5 functionality" {
-    const test_allocator = std.testing.allocator;
 
-    var prob = Tsit5(f64, 2, NoParams).init(probFunc, .{});
+test "callbacks" {
+    var prob = newton.Newton(probFunc, NoParams).init(.{});
+    const test_allocator = std.testing.allocator;
     var solv = prob.solver(test_allocator);
 
     var u: [2]f64 = .{ 0.0, 0.0 };
-    var sol = try solv.solve(u, 0.0, 100.0, .{ .callback = callback, .save = true });
-
-    const stdout = std.io.getStdErr();
+    var sol = try solv.solve(u, 0.0, 100.0, .{ .callback = callback });
     defer sol.deinit();
-    try stdout.writeAll("\n");
-    try sol.printInfo(stdout);
+    try std.testing.expect(sol.u[sol.index - 1][0] < 10.0);
+}
+
+test "basic tsit5 functionality" {
+    const test_allocator = std.testing.allocator;
+
+    var prob = Tsit5(probFunc, NoParams).init(.{});
+    var solv = prob.solver(test_allocator);
+
+    var u: [2]f64 = .{ 0.0, 0.0 };
+    var sol = try solv.solve(u, 0.0, 100.0, .{ .save = true });
+    defer sol.deinit();
+    try std.testing.expectApproxEqRel(sol.t[sol.index - 1], 100.0, 1e-4);
 }
 
 test "basic tsit5 lorenz" {
     const test_allocator = std.testing.allocator;
 
-    var prob = Tsit5(f64, 3, NoParams).init(lorenz, .{});
+    var prob = Tsit5(lorenz, NoParams).init(.{});
     var solv = prob.solver(test_allocator);
 
     var u: [3]f64 = .{ 1.0, 0.0, 0.0 };
@@ -77,7 +83,7 @@ test "basic tsit5 lorenz" {
 test "adaptive tsit5 lorenz" {
     const test_allocator = std.testing.allocator;
 
-    var prob = AdaptiveTsit5(f64, 3, NoParams).init(lorenz, .{});
+    var prob = AdaptiveTsit5(lorenz, NoParams).init(.{});
     var solv = prob.solver(test_allocator);
 
     var u: [3]f64 = .{ 1.0, 0.0, 0.0 };
@@ -96,17 +102,17 @@ test "adaptive tsit5 lorenz" {
     }
 }
 
-// test "interpolated tsit5 functionality" {
-//     const test_allocator = std.testing.allocator;
+// // test "interpolated tsit5 functionality" {
+// //     const test_allocator = std.testing.allocator;
 
-//     var prob = AdaptiveTsit5(f64, 2, NoParams).init(probFunc, .{});
-//     var solv = prob.solver(test_allocator);
+// //     var prob = AdaptiveTsit5(f64, 2, NoParams).init(probFunc, .{});
+// //     var solv = prob.solver(test_allocator);
 
-//     var u: [2]f64 = .{ 0.0, 0.0 };
-//     var sol = try solv.solve(u, 0.0, 100.0, .{ .interpolated_callback = callback, .save = true });
+// //     var u: [2]f64 = .{ 0.0, 0.0 };
+// //     var sol = try solv.solve(u, 0.0, 100.0, .{ .interpolated_callback = callback, .save = true });
 
-//     const stdout = std.io.getStdErr();
-//     defer sol.deinit();
-//     try stdout.writeAll("\n");
-//     try sol.printInfo(stdout);
-// }
+// //     const stdout = std.io.getStdErr();
+// //     defer sol.deinit();
+// //     try stdout.writeAll("\n");
+// //     try sol.printInfo(stdout);
+// // }

@@ -1,19 +1,23 @@
 const std = @import("std");
+const meta = @import("./meta.zig");
 const File = std.fs.File;
 
 pub const ReturnCodes = enum { Success, Terminated, MaxIterReached, Error, Stopped };
 
 pub const SolverErrors = error{ NoAllocator, TimeStepTooSmall, TimeStepTooBig };
 
-pub fn ProbFnType(comptime T: type, comptime N: usize, comptime P: type) type {
-    const U = [N]T;
-    return fn (du: *U, u: *const U, t: T, p: *P) void;
+pub fn InferSolver(comptime ProbFunc: anytype, comptime P: type) type {
+    const SliceType = meta.deduceTypes(ProbFunc);
+    return Solver(SliceType, P);
 }
 
-pub fn Solver(comptime T: type, comptime N: usize, comptime P: type) type {
+pub fn Solver(comptime UType: type, comptime P: type) type {
     return struct {
-        pub const Self = @This();
-        pub const U = [N]T;
+        const Self = @This();
+        pub const N = meta.getSliceInfo(UType).len;
+        pub const T = meta.getSliceInfo(UType).child;
+        pub const U = UType;
+        pub const ProbFnType = fn (du: *U, u: *const U, t: T, p: *P) void;
 
         pub const Config = struct {
             callback: ?*const CallbackFnProto = null,

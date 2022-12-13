@@ -1,6 +1,6 @@
 const std = @import("std");
 const solvers = @import("./solvers.zig");
-const Solver = solvers.Solver;
+const InferSolver = solvers.InferSolver;
 
 fn evalPoly(comptime T: type, x: T, coef1: T, coef2: T, coef3: T, coef4: T, coef5: T) T {
     const pow = std.math.pow;
@@ -82,6 +82,7 @@ fn Coefficients(comptime T: type) type {
 }
 
 fn common_step(
+    comptime prob_function: anytype,
     self: anytype,
     comptime T: type,
     comptime N: usize,
@@ -93,25 +94,25 @@ fn common_step(
     const Self = @typeInfo(@TypeOf(self)).Pointer.child;
     var temp: [N]T = .{0.0} ** N;
     // k0
-    // self.prob(&self.k[0], uprev, t, &self.params);
+    // prob_function(&self.k[0], uprev, t, &self.params);
     for (temp) |*v, i| {
         v.* = uprev[i] + dt * Self.coeff.a[0] * self.k[0][i];
     }
     // k1
-    self.prob(&self.k[1], &temp, t + Self.coeff.c[0] * dt, &self.params);
+    prob_function(&self.k[1], &temp, t + Self.coeff.c[0] * dt, &self.params);
     for (temp) |*v, i| {
         v.* = uprev[i] + dt * (Self.coeff.a[1] * self.k[0][i] +
             Self.coeff.a[2] * self.k[1][i]);
     }
     // k2
-    self.prob(&self.k[2], &temp, t + Self.coeff.c[1] * dt, &self.params);
+    prob_function(&self.k[2], &temp, t + Self.coeff.c[1] * dt, &self.params);
     for (temp) |*v, i| {
         v.* = uprev[i] + dt * (Self.coeff.a[3] * self.k[0][i] +
             Self.coeff.a[4] * self.k[1][i] +
             Self.coeff.a[5] * self.k[2][i]);
     }
     // k3
-    self.prob(&self.k[3], &temp, t + Self.coeff.c[2] * dt, &self.params);
+    prob_function(&self.k[3], &temp, t + Self.coeff.c[2] * dt, &self.params);
     for (temp) |*v, i| {
         v.* = uprev[i] + dt * (Self.coeff.a[6] * self.k[0][i] +
             Self.coeff.a[7] * self.k[1][i] +
@@ -119,7 +120,7 @@ fn common_step(
             Self.coeff.a[9] * self.k[3][i]);
     }
     // k4
-    self.prob(&self.k[4], &temp, t + Self.coeff.c[3] * dt, &self.params);
+    prob_function(&self.k[4], &temp, t + Self.coeff.c[3] * dt, &self.params);
     for (temp) |*v, i| {
         v.* = uprev[i] + dt * (Self.coeff.a[10] * self.k[0][i] +
             Self.coeff.a[11] * self.k[1][i] +
@@ -128,7 +129,7 @@ fn common_step(
             Self.coeff.a[14] * self.k[4][i]);
     }
     // k5
-    self.prob(&self.k[5], &temp, t + dt, &self.params);
+    prob_function(&self.k[5], &temp, t + dt, &self.params);
     // now assign to previous u value
     for (u) |*v, i| {
         v.* = uprev[i] + dt * (Self.coeff.a[15] * self.k[0][i] +
@@ -139,24 +140,25 @@ fn common_step(
             Self.coeff.a[20] * self.k[5][i]);
     }
     //k6
-    self.prob(&self.k[6], u, t + dt, &self.params);
+    prob_function(&self.k[6], u, t + dt, &self.params);
 }
 
-pub fn Tsit5(comptime T: type, comptime N: usize, comptime P: type) type {
+pub fn Tsit5(comptime prob_function: anytype, comptime P: type) type {
     return struct {
         const Self = @This();
-        const SolverType = Solver(T, N, P);
+        const SolverType = InferSolver(prob_function, P);
+        const T = SolverType.T;
+        const N = SolverType.N;
         const U = SolverType.U;
-        const ProbFn = solvers.ProbFnType(T, N, P);
+        const ProbFn = SolverType.ProbFnType;
 
         const coeff = Coefficients(T);
 
-        prob: *const ProbFn,
         params: P,
         k: [7]U = .{.{@as(T, 0.0)} ** N} ** 7,
 
-        pub fn init(comptime prob: *const ProbFn, params: P) Self {
-            return .{ .prob = prob, .params = params };
+        pub fn init(params: P) Self {
+            return .{ .params = params };
         }
 
         pub fn solver(self: *Self, allocator: std.mem.Allocator) SolverType {
@@ -172,21 +174,22 @@ pub fn Tsit5(comptime T: type, comptime N: usize, comptime P: type) type {
             for (self.k[0]) |*v, i| {
                 v.* = self.k[6][i];
             }
-            common_step(self, T, N, u, uprev, t, dt);
+            common_step(prob_function, self, T, N, u, uprev, t, dt);
         }
     };
 }
 
-pub fn AdaptiveTsit5(comptime T: type, comptime N: usize, comptime P: type) type {
+pub fn AdaptiveTsit5(comptime prob_function: anytype, comptime P: type) type {
     return struct {
         const Self = @This();
-        const SolverType = Solver(T, N, P);
+        const SolverType = InferSolver(prob_function, P);
+        const T = SolverType.T;
+        const N = SolverType.N;
         const U = SolverType.U;
-        const ProbFn = solvers.ProbFnType(T, N, P);
+        const ProbFn = SolverType.ProbFnType;
 
         const coeff = Coefficients(T);
 
-        prob: *const ProbFn,
         params: P,
         k: [7]U = .{.{@as(T, 0.0)} ** N} ** 7,
         // interpolant coefficients
@@ -206,8 +209,8 @@ pub fn AdaptiveTsit5(comptime T: type, comptime N: usize, comptime P: type) type
         const beta1 = 7.0 / 50.0;
         const beta2 = 2.0 / 25.0;
 
-        pub fn init(comptime prob: *const ProbFn, params: P) Self {
-            return .{ .prob = prob, .params = params };
+        pub fn init(params: P) Self {
+            return .{ .params = params };
         }
 
         pub fn solver(self: *Self, allocator: std.mem.Allocator) SolverType {
@@ -237,7 +240,7 @@ pub fn AdaptiveTsit5(comptime T: type, comptime N: usize, comptime P: type) type
                 if (dt < self.dtmin) {
                     return error.TimeStepTooSmall;
                 }
-                common_step(self, T, N, u, uprev, t, dt);
+                common_step(prob_function, self, T, N, u, uprev, t, dt);
 
                 var temp: U = .{0.0} ** N;
                 for (temp) |*v, i| {
