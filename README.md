@@ -25,9 +25,9 @@ var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 
 pub fn main() !void {
     defer _ = gpa.deinit();
-    // need to tell the solver the datatype and length of array
-    // so that everything can be stack allocated
-    var prob = zigode.Tsit5(f64, 3, LorenzParams).init(lorenz, .{});
+    // need to tell the solver the function and parameter type
+    // so that everything can be comptime resolved and stack allocated
+    var prob = zigode.Tsit5(lorenz, LorenzParams).init(.{});
 
     // get common solver interface
     var solver = prob.solver(gpa.allocator());
